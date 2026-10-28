@@ -1,0 +1,40 @@
+{
+    "name": "super-kernel/redis",
+    "description": "Redis integration for SuperKernel.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.4.27 <8.5",
+        "ext-redis": ">=6.3.0 <6.4",
+        "psr/container": "^2.0.2",
+        "super-kernel/attribute": "dev-main",
+        "super-kernel/config": "dev-main",
+        "super-kernel/contract": "dev-main",
+        "super-kernel/pool": "dev-main"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.95.27",
+        "phpunit/phpunit": "^13.4.3",
+        "super-kernel/annotator": "dev-main",
+        "super-kernel/context": "dev-main",
+        "super-kernel/di": "dev-main",
+        "super-kernel/reflector": "dev-main"
+    },
+    "autoload": {
+        "psr-4": {
+            "SuperKernel\\Redis\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SuperKernel\\Redis\\Tests\\": "tests/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "scripts": {
+        "format": "@php vendor/bin/php-cs-fixer fix --show-progress=bar --no-ansi",
+        "format:check": "@php vendor/bin/php-cs-fixer check --show-progress=bar --no-ansi --diff",
+        "test": "@php vendor/bin/phpunit"
+    }
+}
