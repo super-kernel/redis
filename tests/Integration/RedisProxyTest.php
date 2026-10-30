@@ -73,7 +73,13 @@ final class RedisProxyTest extends CoroutineTestCase
         });
     }
 
-    /** @throws Throwable When native acquisition, commands, or pool cleanup fail */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When native acquisition, commands, or pool cleanup fail
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testFactoryReturnsNativeConnectionsForNamedItemsAndDatabaseOverrides(): void
     {
         $source = new RedisConfigurationItems();
@@ -118,7 +124,13 @@ final class RedisProxyTest extends CoroutineTestCase
         });
     }
 
-    /** @throws Throwable When instance or static dispatch fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When instance or static dispatch fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testInstanceCallsForwardToTheStaticProxyAndShareItsNativeConnection(): void
     {
         [$factory, $pool] = $this->factory();
@@ -143,7 +155,13 @@ final class RedisProxyTest extends CoroutineTestCase
         });
     }
 
-    /** @throws Throwable When a native Redis call or factory cleanup fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When a native Redis call or factory cleanup fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testStaticProxyUsesTheProviderBindingWithoutConstruction(): void
     {
         [, $pool] = $this->factory();
@@ -160,7 +178,13 @@ final class RedisProxyTest extends CoroutineTestCase
         });
     }
 
-    /** @throws Throwable When a native Redis call or factory cleanup fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When a native Redis call or factory cleanup fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testPoolShutdownRejectsFutureCallsAndAllowsDeferredRetirementToFinish(): void
     {
         [, $pool] = $this->factory();
@@ -179,7 +203,13 @@ final class RedisProxyTest extends CoroutineTestCase
         });
     }
 
-    /** @throws Throwable When native cursor dispatch or coroutine cleanup fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When native cursor dispatch or coroutine cleanup fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testFactoryNativeClientPreservesAllScanCursorReferences(): void
     {
         [$factory, $pool] = $this->factory();
@@ -239,7 +269,13 @@ final class RedisProxyTest extends CoroutineTestCase
         });
     }
 
-    /** @throws Throwable When native Redis dispatch or coroutine cleanup fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When native Redis dispatch or coroutine cleanup fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testNamedArgumentsNativeFluentRepliesAndOneSessionPerCoroutine(): void
     {
         [, $pool] = $this->factory();
@@ -268,7 +304,13 @@ final class RedisProxyTest extends CoroutineTestCase
         });
     }
 
-    /** @throws Throwable When native Redis dispatch or coroutine cleanup fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When native Redis dispatch or coroutine cleanup fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testFactoryDatabaseOverrideKeepsTheProxyDefaultIndependent(): void
     {
         [$factory, $pool] = $this->factory(2);
@@ -290,7 +332,13 @@ final class RedisProxyTest extends CoroutineTestCase
         });
     }
 
-    /** @throws Throwable When native Redis dispatch or coroutine cleanup fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When native Redis dispatch or coroutine cleanup fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testCoroutineEndRetiresTheSessionAndRestoresSingleConnectionCapacity(): void
     {
         [, $pool] = $this->factory();
@@ -309,7 +357,13 @@ final class RedisProxyTest extends CoroutineTestCase
         self::assertNotSame($ids[0], $ids[1]);
     }
 
-    /** @throws Throwable When native Redis dispatch or either coroutine fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When native Redis dispatch or either coroutine fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testSimultaneousCoroutinesHaveDifferentNativeSocketsAndTransactionState(): void
     {
         [, $pool] = $this->factory(2);
@@ -363,7 +417,13 @@ final class RedisProxyTest extends CoroutineTestCase
         });
     }
 
-    /** @throws Throwable When native Redis dispatch or coroutine cleanup fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When native Redis dispatch or coroutine cleanup fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testNativeErrorsRemainUnwrappedAndRetireTheCurrentCoroutineSession(): void
     {
         [, $pool] = $this->factory();
