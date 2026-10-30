@@ -27,7 +27,13 @@ use function sort;
 
 final class RedisFactoryTest extends TestCase
 {
-    /** @throws Throwable When an unbound proxy fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When an unbound proxy fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
     public function testStaticCallsRequireProviderInitialization(): void

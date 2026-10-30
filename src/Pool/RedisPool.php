@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace SuperKernel\Redis\Pool;
 
 use InvalidArgumentException;
-use LogicException;
 use Redis;
 use SuperKernel\Attribute\Provider;
 use SuperKernel\Pool\Contract\PoolInterface;
@@ -18,13 +17,8 @@ use SuperKernel\Redis\Exception\RedisConnectionException;
 use SuperKernel\Redis\Factory\RedisConnectionFactory;
 use SuperKernel\Redis\Session\RedisSession;
 use Swoole\Coroutine;
-use Swoole\Coroutine\Context;
-use Swoole\Thread;
 use Throwable;
-use WeakMap;
 
-use function class_exists;
-use function getmypid;
 use function spl_object_id;
 
 /** Owns configuration-specific pools and their exclusive coroutine sessions. */
@@ -37,15 +31,17 @@ final class RedisPool
     /** @var array<string, RedisConfig> Retains option identities for owned pools */
     private array $options = [];
 
-    private bool $closed = false;
+    private readonly PendingFailure $pendingFailure;
 
-    private ?Throwable $pendingFailure = null;
+    private readonly AcquisitionGuard $acquisitionGuard;
 
     private readonly string $owner;
 
     public function __construct()
     {
-        $this->owner = self::owner();
+        $this->owner = OwnerIdentity::current();
+        $this->pendingFailure = new PendingFailure();
+        $this->acquisitionGuard = new AcquisitionGuard($this->owner, $this->pendingFailure);
     }
 
     /**
@@ -59,7 +55,7 @@ final class RedisPool
      */
     public function get(RedisConfig $option, ?int $database = null): Redis
     {
-        $this->assertOpen();
+        $this->acquisitionGuard->assertOpen();
         $database ??= $option->database;
         if (0 > $database) {
             throw new InvalidArgumentException('The Redis database index must not be negative.');
@@ -75,7 +71,7 @@ final class RedisPool
             throw new InvalidArgumentException('A pool option cannot be reused with another Redis configuration.');
         }
         $key = $poolKey . ':' . $database;
-        $storage = self::sessions($context);
+        $storage = CoroutineSessions::of($context);
         $sessions = $storage[$this] ?? [];
         if (!isset($sessions[$key])) {
             if (!isset($this->pools[$poolKey])) {
@@ -97,13 +93,13 @@ final class RedisPool
                 if (true !== $connection->client()->select($database)) {
                     throw new RedisConnectionException('Selecting the Redis database failed.');
                 }
-                $this->assertOpen();
+                $this->acquisitionGuard->assertOpen();
                 $session = new RedisSession($connection, $pool);
             } catch (Throwable $exception) {
                 try {
                     $pool->discard($connection);
                 } catch (Throwable $cleanupFailure) {
-                    $this->pendingFailure ??= $cleanupFailure;
+                    $this->pendingFailure->record($cleanupFailure);
                 }
                 throw $exception;
             }
@@ -114,7 +110,7 @@ final class RedisPool
                 try {
                     $session->close();
                 } catch (Throwable $exception) {
-                    $this->pendingFailure ??= $exception;
+                    $this->pendingFailure->record($exception);
                 }
             });
         }
@@ -131,10 +127,10 @@ final class RedisPool
     public function discard(Redis $redis, ?Throwable $primaryFailure = null): void
     {
         try {
-            $this->assertOwner();
+            OwnerGuard::assert($this->owner);
             $context = Coroutine::getContext();
             if (null !== $context) {
-                foreach (self::sessions($context)[$this] ?? [] as $session) {
+                foreach (CoroutineSessions::of($context)[$this] ?? [] as $session) {
                     if ($session->redis === $redis) {
                         $session->close();
 
@@ -147,7 +143,7 @@ final class RedisPool
             if (null === $primaryFailure) {
                 throw $exception;
             }
-            $this->pendingFailure ??= $exception;
+            $this->pendingFailure->record($exception);
         }
     }
 
@@ -159,10 +155,10 @@ final class RedisPool
      */
     public function close(): void
     {
-        $this->assertOwner();
-        $failure = $this->takePendingFailure();
+        OwnerGuard::assert($this->owner);
+        $failure = $this->pendingFailure->take();
 
-        $this->closed = true;
+        $this->acquisitionGuard->close();
 
         foreach ($this->pools as $pool) {
             try {
@@ -172,60 +168,11 @@ final class RedisPool
             }
         }
 
-        $pendingFailure = $this->takePendingFailure();
+        $pendingFailure = $this->pendingFailure->take();
         $failure ??= $pendingFailure;
 
         if (null !== $failure) {
             throw $failure;
         }
-    }
-
-    /** @return WeakMap<RedisPool, array<string, RedisSession>> */
-    private static function sessions(Context $context): WeakMap
-    {
-        $sessions = $context[self::class] ?? null;
-
-        if (!$sessions instanceof WeakMap) {
-            $sessions = new WeakMap();
-            $context[self::class] = $sessions;
-        }
-
-        return $sessions;
-    }
-
-    /** @throws Throwable When shutdown, a foreign runtime owner, or deferred cleanup prevents further use */
-    private function assertOpen(): void
-    {
-        $this->assertOwner();
-        $failure = $this->takePendingFailure();
-
-        if (null !== $failure) {
-            throw $failure;
-        }
-
-        if ($this->closed) {
-            throw new LogicException('The Redis pool is closed.');
-        }
-    }
-
-    /** @throws PoolException When a pool is used outside its owning process or thread */
-    private function assertOwner(): void
-    {
-        if ($this->owner !== self::owner()) {
-            throw new PoolException('A Redis pool cannot be shared between processes or threads.');
-        }
-    }
-
-    private function takePendingFailure(): ?Throwable
-    {
-        $failure = $this->pendingFailure;
-        $this->pendingFailure = null;
-
-        return $failure;
-    }
-
-    private static function owner(): string
-    {
-        return getmypid() . ':' . (class_exists(Thread::class) ? Thread::getId() : 0);
     }
 }

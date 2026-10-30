@@ -30,7 +30,13 @@ use function spl_object_id;
 
 final class RedisPoolTest extends CoroutineTestCase
 {
-    /** @throws Throwable When native dispatch, deferred cleanup, or fixture reflection fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When native dispatch, deferred cleanup, or fixture reflection fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testInstanceAndStaticCallsShareTheDefaultCoroutineConnection(): void
     {
         $native = $this->native();
@@ -130,7 +136,13 @@ final class RedisPoolTest extends CoroutineTestCase
         $owner->get(RedisOptions::create());
     }
 
-    /** @throws Throwable When native dispatch, deferred cleanup, or fixture reflection fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When native dispatch, deferred cleanup, or fixture reflection fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testDeferredCleanupFailureIsCapturedAndSurfacesThroughTheNextAcquisitionOnce(): void
     {
         $native = $this->native();
@@ -163,7 +175,13 @@ final class RedisPoolTest extends CoroutineTestCase
         ], $pool->discarded);
     }
 
-    /** @throws Throwable When native dispatch, deferred cleanup, or fixture reflection fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When native dispatch, deferred cleanup, or fixture reflection fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testNativePrimaryFailureIsPreservedAndSecondaryCleanupSurfacesThroughShutdownOnce(): void
     {
         $native = $this->native();
@@ -199,7 +217,13 @@ final class RedisPoolTest extends CoroutineTestCase
         self::assertSame([], $pool->released);
     }
 
-    /** @throws Throwable When native dispatch or fixture setup fails */
+    /**
+     * Static proxy calls reach __callStatic(); the IDE resolves the mixed-in native Redis methods as non-static.
+     *
+     * @throws Throwable When native dispatch or fixture setup fails
+     *
+     * @noinspection PhpDynamicAsStaticMethodCallInspection
+     */
     public function testRebindingDuringAProxyCallRetiresTheConnectionThroughItsOriginalPool(): void
     {
         $native = $this->native();
