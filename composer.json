@@ -7,18 +7,18 @@
         "php": ">=8.4.27 <8.5",
         "ext-redis": ">=6.3.0 <6.4",
         "psr/container": "^2.0.2",
-        "super-kernel/attribute": "dev-main",
-        "super-kernel/config": "dev-main",
-        "super-kernel/contract": "dev-main",
-        "super-kernel/pool": "dev-main"
+        "super-kernel/attribute": "self.version",
+        "super-kernel/config": "self.version",
+        "super-kernel/contract": "self.version",
+        "super-kernel/pool": "self.version"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.95.27",
         "phpunit/phpunit": "^13.4.5",
-        "super-kernel/annotator": "dev-main",
-        "super-kernel/context": "dev-main",
-        "super-kernel/di": "dev-main",
-        "super-kernel/reflector": "dev-main"
+        "super-kernel/annotator": "self.version",
+        "super-kernel/context": "self.version",
+        "super-kernel/di": "self.version",
+        "super-kernel/reflector": "self.version"
     },
     "autoload": {
         "psr-4": {
