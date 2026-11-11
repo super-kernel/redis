@@ -4,30 +4,55 @@
 
 # SuperKernel Redis
 
-`super-kernel/redis` integrates single-server phpredis connections with exclusive coroutine sessions and the SuperKernel Pool component. It exposes native `\Redis` clients and transparent instance/static proxies.
+`super-kernel/redis` gives SuperKernel coroutines pooled phpredis connections to single Redis servers, configured as named items and used as native `\Redis` objects or through a static proxy.
 
-## Options discovered by Config
+## Installation
 
-`SuperKernel\Redis\Config\RedisConfig` is a `final readonly` class. All its properties are public: `poolOption`, `host`, `port`, `database`, `username`, `password`, `connectTimeout`, and `readTimeout`. Read settings as properties, for example `$option->host` and `$option->poolOption`. The required `PoolOption` contains the exact connection factory, capacity coordinator, limits, health mode, and frequency policy to use. Redis does not copy it or create a second set of pool settings.
+```bash
+composer require super-kernel/redis
+```
 
-Config discovers, names, selects defaults, lazily creates, and retains one or more `RedisConfig` items; Redis options are not registered as separate DI entries. `RedisOptionLoader` obtains each requested item from `ConfigInterface`, validates its connection and pool settings, and returns that same object without opening a connection.
+The package needs the `redis` extension `>=6.3.0 <6.4` and the Swoole extension `>=6.2.3 <6.3`, through `super-kernel/pool`; connections are borrowed inside coroutines. It uses `super-kernel/pool` for pooling and `super-kernel/config` to find the configuration, and needs SKERNEL to build the project.
 
-Declare an application source with `#[Configuration(RedisConfig::class)]` and `MultipleConfigInterface`. Each public, parameterless method marked with `#[Configuration]` returns one option. This source form supports both a single option and several named options:
+## What it provides
+
+- Named connection settings declared as `RedisConfig` items, one of them the default.
+- `RedisFactory::get($name, $database)`, which returns a native `\Redis` connection of the current coroutine.
+- One pool per configuration item, with the limits and policies of its `PoolOption`.
+- One connection per item and database for each coroutine, returned to the pool when the coroutine ends.
+- The `Redis` proxy, which forwards static and instance calls to the default connection.
+- Validation of host, port, database, credentials, timeouts, and pool limits before any connection is opened.
+
+It does not provide:
+
+- Redis Cluster, Sentinel, TLS, or persistent connections;
+- automatic failover, reconnection, or repeated commands;
+- PSR-6 or PSR-16 cache adapters;
+- serialization of values, which start with the serializer disabled;
+- sharing of connections between coroutines, processes, or threads.
+
+## Quick start
+
+In an application created from `super-kernel/skeleton` with `super-kernel/redis` installed and Redis listening on `127.0.0.1:6379`, declare the connection. Save it as `src/Config/RedisConfigurations.php`:
 
 ```php
+<?php
+
+declare(strict_types=1);
+
+namespace Src\Config;
+
 use SuperKernel\Attribute\Configuration;
 use SuperKernel\Contract\MultipleConfigInterface;
 use SuperKernel\Pool\Capacity\CoroutineCapacity;
 use SuperKernel\Pool\Config\PoolOption;
-use SuperKernel\Pool\Constants\HealthCheckMode;
-use SuperKernel\Pool\Frequency\SmartLowFrequency;
 use SuperKernel\Redis\Config\RedisConfig;
 use SuperKernel\Redis\Factory\RedisConnectionFactory;
 
 #[Configuration(RedisConfig::class)]
 final class RedisConfigurations implements MultipleConfigInterface
 {
-    #[Configuration(default: true)]
+    #[Configuration]
     public function primary(): RedisConfig
     {
         return new RedisConfig(
@@ -35,149 +60,77 @@ final class RedisConfigurations implements MultipleConfigInterface
                 factory: new RedisConnectionFactory(),
                 capacity: new CoroutineCapacity(8),
                 maxConnections: 8,
-                waitTimeout: 0.25,
-                healthChecks: HealthCheckMode::OnBorrowAndReturn,
-                frequency: new SmartLowFrequency(),
             ),
             host: '127.0.0.1',
             port: 6379,
-            database: 0,
-            connectTimeout: 1.0,
-            readTimeout: 1.0,
-        );
-    }
-
-    #[Configuration]
-    public function cache(): RedisConfig
-    {
-        return new RedisConfig(
-            poolOption: new PoolOption(
-                factory: new RedisConnectionFactory(),
-                capacity: new CoroutineCapacity(4),
-                maxConnections: 4,
-            ),
-            database: 1,
         );
     }
 }
 ```
 
-Method names are case-sensitive item names. A source with only one marked method needs no default flag. With several items, `default: true` selects the unnamed default. Without a default, named lookups still work; only unnamed access fails. Unknown names never fall back to another item.
-
-A consumer of the injected `ConfigInterface` can inspect the retained option directly:
+Use a connection inside a coroutine. Save the script as `bin/greeting.php`:
 
 ```php
-$primary = $config->get(RedisConfig::class);
-$same = $config->get(RedisConfig::class, 'primary');
-$cache = $config->get(RedisConfig::class, 'cache');
-```
+<?php
 
-For validated options, use the injected `RedisOptionLoader::get($name)`; use the injected `RedisFactory` to borrow native clients. Invalid domain values raise `InvalidRedisConfigurationException` before pool construction. Config retains even a raw invalid option, so the loader validates every request. Readonly properties cannot be changed after construction; changed settings require a new option and a new owning configuration lifecycle.
+declare(strict_types=1);
 
-## Explicit pool assembly
-
-`RedisPool::get($option, database: 2)` accepts the same concrete `RedisConfig` directly. It validates the item and passes its unchanged `poolOption` to Pool. No timers are started automatically.
-
-`RedisConnectionFactory` may be created before its owning `RedisConfig`. `RedisPool` binds the completed option to that factory before constructing the pool, without opening a connection or replacing the factory. A factory can bind only one option; repeated binding to that same object is allowed. When assembling a generic Pool directly, call `$factory->bind($option)` first, or construct `new RedisConnectionFactory($option)` for a standalone factory. Custom factories must create fresh `RedisConnection` wrappers using the same option.
-
-One `PoolOption` identifies one pool within its owning `RedisPool`. Database sessions share that pool's capacity, while each database has its own native session within a coroutine. Repeated access to the same option/database reuses the session. Distinct options need their own `PoolOption`; sharing it between different option objects is rejected. Database selection occurs before exposing a new session, and failed selection discards the acquired connection. Once exposed, session state remains caller-owned.
-
-## Native connection factory
-
-`Factory\RedisFactory` has one operation:
-
-```php
-public function get(?string $name = null, ?int $database = null): \Redis;
-```
-
-It obtains an exclusive native connection from `Pool\RedisPool`. It does not construct proxy classes, dispatch Redis commands, or manage shutdown. Receive the factory through typed constructor injection:
-
-```php
+use SuperKernel\Context\ApplicationContext;
 use SuperKernel\Redis\Factory\RedisFactory;
+use SuperKernel\Redis\Pool\RedisPool;
 
-final readonly class NativeCounter
-{
-    public function __construct(private RedisFactory $redisFactory)
-    {
-    }
+use function Swoole\Coroutine\run;
 
-    public function increment(string $key): mixed
-    {
-        return $this->redisFactory->get()->incr($key);
-    }
-}
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+run(static function (): void {
+    $container = ApplicationContext::getContainer();
+
+    $redis = $container->get(RedisFactory::class)->get();
+    $redis->set('greeting', 'Hello from Redis');
+
+    echo $redis->get('greeting'), PHP_EOL;
+
+    $container->get(RedisPool::class)->close();
+});
 ```
 
-`get()` and `get(null)` select the Config-owned default. Pass a configuration name to select its endpoint, credentials, timeouts, database, and pool limits. The optional database argument overrides only the initial database without modifying the retained configuration item:
+Build the project and run the script:
 
-```php
-$default = $redisFactory->get();
-$cache = $redisFactory->get('cache');
-$queue = $redisFactory->get('cache', database: 2);
-
-$default->set('key', 'value');
-$cache->get('key');
-$queue->rPush('messages', 'payload');
+```bash
+skernel build
+php bin/greeting.php
 ```
 
-Run acquisition and commands inside an active Swoole coroutine. For one `RedisPool`, the same retained configuration item and initial database share one native connection within that coroutine. A name and its default alias use that same connection. Distinct options have independent pools; database overrides of one option share its pool capacity, so size it for all simultaneously held sessions. If two item methods intentionally return the same option, their pool is shared. Config retains option identity; connections read the original readonly properties.
+It prints `Hello from Redis`.
 
-Factory results are actual `\Redis` objects. They support native signatures, including cursor references:
+## Public surface
 
-```php
-$redis = $redisFactory->get();
-$iterator = null;
-do {
-    $keys = $redis->scan($iterator, 'cache:*');
-} while (0 !== $iterator);
-```
+| Name | Kind | Purpose |
+| --- | --- | --- |
+| `SuperKernel\Attribute\Configuration` | Attribute | Declares the `RedisConfig` source class and marks each method that returns an item, with `default: true` for the default. |
+| `SuperKernel\Contract\MultipleConfigInterface` | Interface | Implemented by the source class whose methods return named items. |
+| `SuperKernel\Redis\Config\RedisConfig` | Class | One connection's pool option, host, port, database, credentials, and timeouts. |
+| `SuperKernel\Redis\Factory\RedisConnectionFactory` | Class | The connection factory to put in each item's `PoolOption`. |
+| `SuperKernel\Redis\Factory\RedisFactory` | Class | `get($name, $database)` returns the coroutine's native `\Redis` connection. |
+| `SuperKernel\Redis\Proxy\Redis` | Class | Forwards static and instance calls to the default connection. |
+| `SuperKernel\Redis\Pool\RedisPool` | Class | Owns the pools; `discard()` retires a connection and `close()` shuts every pool down. |
+| `SuperKernel\Redis\Config\RedisOptionLoader` | Class | `get($name)` returns a validated configuration item. |
 
-All use must finish within the owning coroutine. Native results do not intercept command failures; if the caller wants to retire a failed connection immediately, use the injected `RedisPool::discard($redis)`. Coroutine exit retires every held native connection even when the caller does not explicitly discard it.
+## Behavior to know
 
-## Pooled proxy
+- Connections are borrowed only inside a coroutine; elsewhere `get()` raises `SuperKernel\Pool\Exception\PoolException` with `Redis connection acquisition requires an active Swoole coroutine.` No connection is opened before the first `get()`.
+- An unknown name raises `SuperKernel\Config\Exception\ConfigurationNotFoundException` with `No Redis configuration item is registered for this name.`; with several items and no default, only unnamed access fails.
+- Invalid settings raise `SuperKernel\Redis\Exception\InvalidRedisConfigurationException`, for example `The Redis TCP port must be between 1 and 65535.`, before a pool is created.
+- A connection holds its pool slot until its coroutine ends, so a long-running coroutine keeps it; transactions, pipelines, the selected database, and options stay on that connection until then.
+- A proxy call that throws retires its connection; later use of the same item and database in that coroutine raises `The native Redis session has already been retired.`
+- The proxy works only after the container has created `RedisFactory`; before that it raises `The Redis proxy requires initialization through RedisFactoryProvider.` After `RedisPool::close()`, every borrow raises `The Redis pool is closed.`
+- Configuration items are found in the build metadata: run `skernel build` again after adding, removing, or changing them, or start with `skernel run`, which builds first.
 
-`Proxy\Redis` forwards static and instance calls to the native client returned by `RedisFactory::get()` for the default configuration item. Its `@mixin \Redis` annotation provides native API discovery; it does not extend `\Redis`, so every command passes through the pool. The binding is initialized when DI resolves `RedisFactory`, without acquiring a connection. Resolve that factory before using proxies; constructing or injecting a proxy alone does not initialize the binding.
+## Documentation
 
-```php
-use SuperKernel\Redis\Proxy\Redis;
+The developer documentation covers configuration items, the factory and sessions, the proxy, pooling across databases, shutdown and cleanup, the error messages, and what not to do: [SuperKernel Redis](https://github.com/super-kernel/.github/blob/main/docs/components/redis.md).
 
-Redis::set('key', 'value');
-$value = Redis::get('key');
-```
+## License
 
-Receive `Redis` through typed DI for instance calls. Both `Redis::get('key')` and `$redisProxy->get('key')` use the default configuration item and its configured initial database, sharing the current coroutine's native session. Configuration and pool lifecycle stay outside the proxy.
-
-Use the injected factory to select a named item or override its initial database:
-
-```php
-$cache = $redisFactory->get('cache', database: 1);
-$value = $cache->get('key');
-```
-
-Positional and named arguments, native return values, `false` replies, and last-error state are preserved. Native fluent methods return the actual connection:
-
-```php
-$result = Redis::multi()->set('first', 'one')->set('second', 'two')->exec();
-```
-
-A proxy-dispatched call that throws retires that session and propagates its original throwable without replay. Further acquisition of the same configuration/database in that coroutine fails. Calls made directly on native fluent results are ordinary phpredis calls; the proxy cannot intercept their exceptions.
-
-PHP magic dispatch cannot update the caller's by-reference cursor. Use the native factory result for `scan`, `hScan`, `sScan`, and `zScan`; the proxy provides no wrappers for those methods.
-
-The proxy binds one default factory/pool pair per process or thread. Resolving a replacement factory provider changes subsequent proxy calls, including calls through existing proxy objects. Already acquired native sessions remain owned by their original pool.
-
-## Native session lifetime
-
-Native sessions retain a pool slot until coroutine exit, even after the last successful command. Long-lived coroutines can exhaust the configured capacity. Transactions, pipelines, selected databases, and native options persist for the session. Every native session is discarded at coroutine exit so this state cannot pass to the next borrower. Never retain a native object after that point or pass it to another coroutine.
-
-Connections initially use the configured database, disabled automatic command retries, and no serializer. Native calls may change those settings for the current session. The component does not change global Swoole runtime hooks; enable the appropriate socket hooks in the application when network I/O should yield.
-
-## Lifecycle and boundaries
-
-With `CoroutineCapacity`, load options and create resource-owning pools after process forks, separately in each native thread. The retained option contains an owner-bound capacity coordinator. Never transfer initialized coordinators, pools, factories, or sockets between processes or threads.
-
-Inject `Pool\RedisPool` for native lifecycle management. Its `close()` permanently closes all configured native pools and rejects subsequent factory acquisition and proxy calls. Held native clients may finish inside their owning coroutine; coroutine exit retires them. Close the pool in its owning active coroutine before the scheduler terminates. `RedisFactory` has no shutdown method; a proxy's `close()` forwards to the native connection and closes only that connection. Constructing `RedisPool` performs no connection I/O.
-
-Deferred cleanup failures are retained by `RedisPool` and reported once by the next acquisition or `close()`. Call `close()` during application shutdown even if no later command will expose a pending cleanup failure. Failed physical cleanup keeps its pool capacity occupied. Repeated `close()` calls retry cleanup across all owned pools, including failures from borrowers retired after the initial shutdown. Successfully closed connections stay closed. The application owns shutdown scheduling.
-
-Each configuration targets a single Redis endpoint. Cluster, Sentinel discovery, PSR cache adapters, automatic failover, and cross-process socket sharing are not provided.
+Released under the MIT License. See [LICENSE](LICENSE).
