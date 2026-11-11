@@ -12,7 +12,7 @@
 composer require super-kernel/redis
 ```
 
-本包需要 `>=6.3.0 <6.4` 的 `redis` 扩展，运行时还需要 Swoole 扩展，因为连接是在协程中借用的。它使用 `super-kernel/pool` 进行池化，使用 `super-kernel/config` 查找配置，并需要 SKERNEL 构建项目。
+本包需要 `>=6.3.0 <6.4` 的 `redis` 扩展，以及通过 `super-kernel/pool` 引入的 `>=6.2.3 <6.3` 的 Swoole 扩展；连接是在协程中借用的。它使用 `super-kernel/pool` 进行池化，使用 `super-kernel/config` 查找配置，并需要 SKERNEL 构建项目。
 
 ## 提供的能力
 

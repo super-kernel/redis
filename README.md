@@ -12,7 +12,7 @@
 composer require super-kernel/redis
 ```
 
-The package needs the `redis` extension `>=6.3.0 <6.4` and, at run time, the Swoole extension, because connections are borrowed inside coroutines. It uses `super-kernel/pool` for pooling and `super-kernel/config` to find the configuration, and needs SKERNEL to build the project.
+The package needs the `redis` extension `>=6.3.0 <6.4` and the Swoole extension `>=6.2.3 <6.3`, through `super-kernel/pool`; connections are borrowed inside coroutines. It uses `super-kernel/pool` for pooling and `super-kernel/config` to find the configuration, and needs SKERNEL to build the project.
 
 ## What it provides
 
